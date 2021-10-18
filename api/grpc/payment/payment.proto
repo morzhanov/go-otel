@@ -1,7 +1,5 @@
 syntax = "proto3";
 
-import "google/protobuf/empty.proto";
-
 package payment;
 
 option go_package = "github.com/morzhanov/go-otel/api/grpc/payment";

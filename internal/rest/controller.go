@@ -109,8 +109,8 @@ func (c *baseController) Tracer() opentracing.Tracer { return c.tracer }
 func (c *baseController) Logger() *zap.Logger        { return c.logger }
 func (c *baseController) MC() metrics.Collector      { return c.mc }
 
-func NewController(
-	tracer opentracing.Tracer,
+func NewBaseController(
+	//tracer opentracing.Tracer,
 	logger *zap.Logger,
 	mc metrics.Collector,
 ) BaseController {
