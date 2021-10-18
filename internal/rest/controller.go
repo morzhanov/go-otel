@@ -10,20 +10,14 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/gin-contrib/cors"
-	errs "github.com/morzhanov/go-realworld/internal/common/errors"
-
 	"github.com/gin-gonic/gin"
-	"github.com/morzhanov/go-realworld/internal/common/metrics"
-	"github.com/morzhanov/go-realworld/internal/common/tracing"
-	"github.com/opentracing/opentracing-go"
-	"github.com/prometheus/common/log"
+	"github.com/morzhanov/go-otel/internal/metrics"
 	"go.uber.org/zap"
 )
 
 type baseController struct {
 	router *gin.Engine
-	tracer opentracing.Tracer
+	//tracer opentracing.Tracer
 	logger *zap.Logger
 	mc     metrics.Collector
 }
@@ -32,10 +26,10 @@ type BaseController interface {
 	Listen(ctx context.Context, cancel context.CancelFunc, port string)
 	ParseRestBody(ctx *gin.Context, input interface{}) error
 	HandleRestError(ctx *gin.Context, err error)
-	GetSpan(ctx *gin.Context) *opentracing.Span
+	//GetSpan(ctx *gin.Context) *opentracing.Span
 	Handler(handler gin.HandlerFunc) gin.HandlerFunc
 	Router() *gin.Engine
-	Tracer() opentracing.Tracer
+	//Tracer() opentracing.Tracer
 	Logger() *zap.Logger
 	MC() metrics.Collector
 }
@@ -53,20 +47,20 @@ func (c *baseController) Listen(
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			cancel()
-			errs.LogInitializationError(err, "rest controller", c.logger)
+			c.logger.Fatal("error during REST controller setup", zap.Error(err))
 			return
 		}
 	}()
 
 	<-ctx.Done()
-	log.Info("Shutdown REST Server ...")
+	c.logger.Info("gRPC server started")
 
 	ctx, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel2()
 	if err := srv.Shutdown(ctx); err != nil {
 		cancel()
 		cancel2()
-		errs.LogInitializationError(err, "rest controller", c.logger)
+		c.logger.Fatal("error during REST controller setup", zap.Error(err))
 	}
 }
 
@@ -89,25 +83,26 @@ func (c *baseController) HandleRestError(ctx *gin.Context, err error) {
 	ctx.String(http.StatusInternalServerError, err.Error())
 }
 
-func (c *baseController) GetSpan(ctx *gin.Context) *opentracing.Span {
-	item, _ := ctx.Get("span")
-	span := item.(opentracing.Span)
-	return &span
-}
+//func (c *baseController) GetSpan(ctx *gin.Context) *opentracing.Span {
+//	item, _ := ctx.Get("span")
+//	span := item.(opentracing.Span)
+//	return &span
+//}
 
 func (c *baseController) Handler(handler gin.HandlerFunc) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		span := tracing.StartSpanFromHttpRequest(c.tracer, ctx.Request)
-		ctx.Set("span", span)
+		//span := tracing.StartSpanFromHttpRequest(c.tracer, ctx.Request)
+		//ctx.Set("span", span)
 		handler(ctx)
-		defer span.Finish()
+		//defer span.Finish()
 	}
 }
 
-func (c *baseController) Router() *gin.Engine        { return c.router }
-func (c *baseController) Tracer() opentracing.Tracer { return c.tracer }
-func (c *baseController) Logger() *zap.Logger        { return c.logger }
-func (c *baseController) MC() metrics.Collector      { return c.mc }
+func (c *baseController) Router() *gin.Engine { return c.router }
+
+//func (c *baseController) Tracer() opentracing.Tracer { return c.tracer }
+func (c *baseController) Logger() *zap.Logger   { return c.logger }
+func (c *baseController) MC() metrics.Collector { return c.mc }
 
 func NewBaseController(
 	//tracer opentracing.Tracer,
@@ -115,11 +110,7 @@ func NewBaseController(
 	mc metrics.Collector,
 ) BaseController {
 	router := gin.Default()
-	config := cors.DefaultConfig()
-	config.AllowAllOrigins = true
-	config.AddAllowHeaders([]string{"authorization"}...)
-	router.Use(cors.New(config))
-	c := baseController{router, tracer, logger, mc}
-	c.mc.RegisterMetricsEndpoint(router)
+	c := baseController{router, logger, mc}
+	//c.mc.RegisterMetricsEndpoint(router)
 	return &c
 }

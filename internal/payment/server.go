@@ -6,7 +6,7 @@ import (
 	"net"
 
 	gpayment "github.com/morzhanov/go-otel/api/grpc/payment"
-	gserver "github.com/morzhanov/go-otel/internal/grpc/server"
+	gserver "github.com/morzhanov/go-otel/internal/grpc"
 	"github.com/morzhanov/go-otel/internal/mq"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -34,8 +34,8 @@ type Server interface {
 //}
 
 func (s *server) GetPaymentInfo(ctx context.Context, in *gpayment.GetPaymentInfoRequest) (*gpayment.PaymentMessage, error) {
-	ctx, span := s.PrepareContext(ctx)
-	defer span.Finish()
+	//ctx, span := s.PrepareContext(ctx)
+	//defer span.Finish()
 	return s.pay.GetPaymentInfo(in)
 }
 

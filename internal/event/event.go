@@ -3,38 +3,34 @@ package event
 import (
 	"context"
 
-	"github.com/morzhanov/go-realworld/internal/common/mq"
-	"github.com/morzhanov/go-realworld/internal/common/sender"
-	"github.com/morzhanov/go-realworld/internal/common/tracing"
-	"github.com/opentracing/opentracing-go"
+	"github.com/morzhanov/go-otel/internal/mq"
 	"github.com/segmentio/kafka-go"
 	"go.uber.org/zap"
 )
 
 type baseController struct {
-	tracer          opentracing.Tracer
-	sender          sender.Sender
-	mq              mq.MQ
-	logger          *zap.Logger
-	consumerGroupId string
+	//tracer          opentracing.Tracer
+	mq      mq.MQ
+	logger  *zap.Logger
+	groupID string
 }
 
 type BaseController interface {
-	CreateSpan(in *kafka.Message) opentracing.Span
+	//CreateSpan(in *kafka.Message) opentracing.Span
 	Listen(ctx context.Context, processRequest func(*kafka.Message))
 	Logger() *zap.Logger
 	ConsumerGroupId() string
 }
 
-func (c *baseController) CreateSpan(in *kafka.Message) opentracing.Span {
-	return tracing.StartSpanFromEventsRequest(c.tracer, in)
-}
+//func (c *baseController) CreateSpan(in *kafka.Message) opentracing.Span {
+//	return tracing.StartSpanFromEventsRequest(c.tracer, in)
+//}
 
 func (c *baseController) Listen(
 	ctx context.Context,
 	processRequest func(*kafka.Message),
 ) {
-	r := c.mq.CreateReader(c.consumerGroupId)
+	r := c.mq.CreateReader(c.groupID)
 	for {
 		m, err := r.ReadMessage(context.Background())
 		if err != nil {
@@ -56,24 +52,25 @@ func (c *baseController) Logger() *zap.Logger {
 }
 
 func (c *baseController) ConsumerGroupId() string {
-	return c.consumerGroupId
+	return c.groupID
 }
 
 func NewController(
-	tracer opentracing.Tracer,
+	//tracer opentracing.Tracer,
 	logger *zap.Logger,
-	topic string,
+	kafkaUrl string,
+	kafkaTopic string,
+	kafkaGroupID string,
 ) (BaseController, error) {
-	msgQ, err := mq.NewMq(conf, conf.KafkaTopic)
+	msgQ, err := mq.NewMq(kafkaUrl, kafkaTopic)
 	if err != nil {
 		return nil, err
 	}
 	c := &baseController{
-		sender:          s,
-		tracer:          tracer,
-		mq:              msgQ,
-		logger:          logger,
-		consumerGroupId: conf.KafkaConsumerGroupId,
+		//tracer:          tracer,
+		mq:      msgQ,
+		logger:  logger,
+		groupID: kafkaGroupID,
 	}
 	return c, err
 }

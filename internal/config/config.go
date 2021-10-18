@@ -3,6 +3,9 @@ package config
 import "github.com/spf13/viper"
 
 type Config struct {
+	KafkaURL     string
+	KafkaTopic   string
+	KafkaGroupID string
 }
 
 func NewConfig() (config *Config, err error) {

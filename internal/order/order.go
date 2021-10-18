@@ -81,7 +81,7 @@ func (s *service) handleProcessOrder(c *gin.Context) {
 }
 
 func (s *service) Listen() error {
-	r := gin.Default()
+	r := s.BaseController.Router()
 	r.POST("/", s.handleCreateOrder)
 	r.POST("/:id", s.handleProcessOrder)
 	return r.Run()

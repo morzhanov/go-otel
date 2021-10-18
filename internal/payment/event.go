@@ -7,7 +7,6 @@ import (
 	gpayment "github.com/morzhanov/go-otel/api/grpc/payment"
 	"github.com/morzhanov/go-otel/internal/config"
 	"github.com/morzhanov/go-otel/internal/event"
-	"github.com/opentracing/opentracing-go"
 	"github.com/segmentio/kafka-go"
 	"go.uber.org/zap"
 )
@@ -22,8 +21,8 @@ type Controller interface {
 }
 
 func (c *eventController) processPayment(in *kafka.Message) {
-	span := c.CreateSpan(in)
-	defer span.Finish()
+	//span := c.CreateSpan(in)
+	//defer span.Finish()
 
 	res := gpayment.ProcessPaymentMessage{}
 	if err := json.Unmarshal(in.Value, &res); err != nil {
@@ -38,12 +37,12 @@ func (c *eventController) Listen(ctx context.Context) {
 	c.BaseController.Listen(ctx, c.processPayment)
 }
 
-func NewPicturesEventsController(
-	tracer opentracing.Tracer,
+func NewController(
+	//tracer opentracing.Tracer,
 	logger *zap.Logger,
 	pay Payment,
 	c *config.Config,
 ) (Controller, error) {
-	controller, err := event.NewController(tracer, logger, c)
+	controller, err := event.NewController(logger, c.KafkaURL, c.KafkaTopic, c.KafkaGroupID)
 	return &eventController{BaseController: controller, pay: pay}, err
 }
