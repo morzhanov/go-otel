@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+
+package order;
+
+option go_package = "github.com/morzhanov/go-otel/api/grpc/order";
+
+message OrderMessage {
+  string id = 1;
+  string name = 2;
+  int32 amount = 3;
+  string status = 4;
+}
