@@ -6,6 +6,8 @@ import (
 	"io/ioutil"
 	"net/http"
 
+	"github.com/morzhanov/go-otel/internal/mq"
+
 	"github.com/gin-gonic/gin"
 	porder "github.com/morzhanov/go-otel/api/grpc/order"
 	"github.com/morzhanov/go-otel/internal/metrics"
@@ -19,6 +21,7 @@ import (
 type service struct {
 	rest.BaseController
 	coll *mongo.Collection
+	mq   mq.MQ
 }
 
 type Service interface {
@@ -73,6 +76,7 @@ func (s *service) handleProcessOrder(c *gin.Context) {
 		s.handleHttpErr(c, res.Err())
 		return
 	}
+
 	c.JSON(http.StatusOK, &msg)
 }
 
@@ -83,7 +87,7 @@ func (s *service) Listen() error {
 	return r.Run()
 }
 
-func NewService(log *zap.Logger, mc metrics.Collector, coll *mongo.Collection) Service {
+func NewService(log *zap.Logger, mc metrics.Collector, coll *mongo.Collection, msgq mq.MQ) Service {
 	bc := rest.NewBaseController(log, mc)
-	return &service{BaseController: bc, coll: coll}
+	return &service{BaseController: bc, coll: coll, mq: msgq}
 }

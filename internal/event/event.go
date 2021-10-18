@@ -1,9 +1,8 @@
-package controller
+package event
 
 import (
 	"context"
 
-	"github.com/morzhanov/go-realworld/internal/common/config"
 	"github.com/morzhanov/go-realworld/internal/common/mq"
 	"github.com/morzhanov/go-realworld/internal/common/sender"
 	"github.com/morzhanov/go-realworld/internal/common/tracing"
@@ -61,10 +60,9 @@ func (c *baseController) ConsumerGroupId() string {
 }
 
 func NewController(
-	s sender.Sender,
 	tracer opentracing.Tracer,
 	logger *zap.Logger,
-	conf *config.Config,
+	topic string,
 ) (BaseController, error) {
 	msgQ, err := mq.NewMq(conf, conf.KafkaTopic)
 	if err != nil {

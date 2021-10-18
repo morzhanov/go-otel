@@ -21,3 +21,10 @@ message PaymentMessage {
 message GetPaymentInfoRequest {
   string order_id = 1;
 }
+
+message ProcessPaymentMessage {
+  string order_id = 1;
+  string name = 3;
+  int32 amount = 4;
+  string status = 5;
+}

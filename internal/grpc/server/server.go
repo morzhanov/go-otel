@@ -15,14 +15,15 @@ import (
 )
 
 type baseServer struct {
-	Tracer opentracing.Tracer
-	Logger *zap.Logger
-	Uri    string
+	tracer opentracing.Tracer
+	logger *zap.Logger
+	uri    string
 }
 
 type BaseServer interface {
 	PrepareContext(ctx context.Context) (context.Context, opentracing.Span)
 	Listen(ctx context.Context, cancel context.CancelFunc, server *grpc.Server)
+	Logger() *zap.Logger
 }
 
 func (s *baseServer) PrepareContext(ctx context.Context) (context.Context, opentracing.Span) {
@@ -51,6 +52,10 @@ func (s *baseServer) Listen(ctx context.Context, cancel context.CancelFunc, serv
 		errors.LogInitializationError(err, "grpc server", s.Logger)
 		return
 	}
+}
+
+func (s *baseServer) Logger() *zap.Logger {
+	return s.logger
 }
 
 func NewServer(

@@ -2,11 +2,12 @@ package mq
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/segmentio/kafka-go"
 )
 
-type mQ struct {
+type msgq struct {
 	conn     *kafka.Conn
 	kafkaUri string
 	topic    string
@@ -17,39 +18,58 @@ type MQ interface {
 	Conn() *kafka.Conn
 	KafkaUri() string
 	Topic() string
+	WriteMessage(msg interface{}) error
 }
 
-func (mq *mQ) createTopic() error {
+func (m *msgq) createTopic() error {
 	topicConfigs := []kafka.TopicConfig{
 		{
-			Topic:             mq.topic,
+			Topic:             m.topic,
 			NumPartitions:     1,
 			ReplicationFactor: 1,
 		},
 	}
-	return mq.conn.CreateTopics(topicConfigs...)
+	return m.conn.CreateTopics(topicConfigs...)
 }
 
-func (mq *mQ) CreateReader(groupId string) *kafka.Reader {
+func (m *msgq) CreateReader(groupId string) *kafka.Reader {
 	return kafka.NewReader(kafka.ReaderConfig{
-		Brokers:  []string{mq.kafkaUri},
-		Topic:    mq.topic,
+		Brokers:  []string{m.kafkaUri},
+		Topic:    m.topic,
 		GroupID:  groupId,
 		MinBytes: 10e3,
 		MaxBytes: 10e6,
 	})
 }
 
-func (mq *mQ) Conn() *kafka.Conn {
-	return mq.conn
+func (m *msgq) Conn() *kafka.Conn {
+	return m.conn
 }
 
-func (mq *mQ) KafkaUri() string {
-	return mq.kafkaUri
+func (m *msgq) KafkaUri() string {
+	return m.kafkaUri
 }
 
-func (mq *mQ) Topic() string {
-	return mq.topic
+func (m *msgq) Topic() string {
+	return m.topic
+}
+
+func (m *msgq) WriteMessage(msg interface{}) error {
+	b, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	//msg := kafka.Message{Value: b}
+	//if err := tracing.InjectEventsSpan(*span, &m); err != nil {
+	//	return err
+	//}
+	if _, err := m.conn.Write(b); err != nil {
+		return err
+	}
+	if err := m.conn.Close(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func NewMq(uri string, topic string) (res MQ, err error) {
@@ -57,7 +77,7 @@ func NewMq(uri string, topic string) (res MQ, err error) {
 	if err != nil {
 		return nil, err
 	}
-	msgQ := mQ{
+	msgQ := msgq{
 		conn,
 		uri,
 		topic,
