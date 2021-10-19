@@ -4,9 +4,10 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/morzhanov/go-otel/internal/telemetry"
+
 	"github.com/gin-gonic/gin"
 	"github.com/morzhanov/go-otel/api/grpc/order"
-	"github.com/morzhanov/go-otel/internal/metrics"
 	"github.com/morzhanov/go-otel/internal/rest"
 	"go.uber.org/zap"
 )
@@ -26,12 +27,16 @@ func (c *controller) handleHttpErr(ctx *gin.Context, err error) {
 }
 
 func (c *controller) handleCreateOrder(ctx *gin.Context) {
+	t := c.Tracer()("rest")
+	sctx, span := t.Start(ctx, "create-order")
+	defer span.End()
+
 	d := order.CreateOrderMessage{}
 	if err := c.BaseController.ParseRestBody(ctx, &d); err != nil {
 		c.handleHttpErr(ctx, err)
 		return
 	}
-	res, err := c.client.CreateOrder(&d)
+	res, err := c.client.CreateOrder(sctx, &d)
 	if err != nil {
 		c.handleHttpErr(ctx, err)
 		return
@@ -40,8 +45,13 @@ func (c *controller) handleCreateOrder(ctx *gin.Context) {
 }
 
 func (c *controller) handleProcessOrder(ctx *gin.Context) {
+	t := c.Tracer()("rest")
+	sctx, span := t.Start(ctx, "process-order")
+	ctx.Set("span-context", span.SpanContext())
+	defer span.End()
+
 	id := ctx.Param("id")
-	res, err := c.client.ProcessOrder(id)
+	res, err := c.client.ProcessOrder(sctx, id)
 	if err != nil {
 		c.handleHttpErr(ctx, err)
 		return
@@ -50,8 +60,13 @@ func (c *controller) handleProcessOrder(ctx *gin.Context) {
 }
 
 func (c *controller) handleGetPaymentInfo(ctx *gin.Context) {
+	t := c.Tracer()("rest")
+	sctx, span := t.Start(ctx, "get-payment-info")
+	ctx.Set("span-context", span.SpanContext())
+	defer span.End()
+
 	orderID := ctx.Param("orderID")
-	res, err := c.client.GetPaymentInfo(orderID)
+	res, err := c.client.GetPaymentInfo(sctx, orderID)
 	if err != nil {
 		c.handleHttpErr(ctx, err)
 		return
@@ -68,14 +83,12 @@ func (c *controller) Listen(
 }
 
 func NewController(
-	//tracer opentracing.Tracer,
 	client Client,
 	log *zap.Logger,
-	mc metrics.Collector,
+	tel telemetry.Telemetry,
 ) Controller {
-	bc := rest.NewBaseController(log, mc)
+	bc := rest.NewBaseController(log, tel)
 	c := controller{BaseController: bc, client: client}
-
 	r := bc.Router()
 	r.POST("/order", bc.Handler(c.handleCreateOrder))
 	r.PUT("/order/:id", bc.Handler(c.handleProcessOrder))

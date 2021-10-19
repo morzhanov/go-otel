@@ -1,7 +1,7 @@
 package mq_test
 
 import (
-	"github.com/morzhanov/go-realworld/internal/common/mq"
+	"github.com/morzhanov/go-otel/internal/mq"
 	"github.com/segmentio/kafka-go"
 )
 
@@ -10,6 +10,7 @@ type MqMock struct {
 	connMock         func() *kafka.Conn
 	kafkaUriMock     func() string
 	topicMock        func() string
+	writeMock        func() error
 }
 
 func (m *MqMock) CreateReader(groupId string) *kafka.Reader {
@@ -24,12 +25,16 @@ func (m *MqMock) KafkaUri() string {
 func (m *MqMock) Topic() string {
 	return m.topicMock()
 }
+func (m *MqMock) WriteMessage(_ interface{}) error {
+	return m.writeMock()
+}
 
 func NewMqMock(
 	createReader func(groupId string) *kafka.Reader,
 	conn func() *kafka.Conn,
 	kafkaUri func() string,
 	topic func() string,
+	write func() error,
 ) mq.MQ {
 	m := MqMock{}
 	if createReader != nil {
@@ -51,6 +56,11 @@ func NewMqMock(
 		m.topicMock = topic
 	} else {
 		m.topicMock = func() string { return "topic" }
+	}
+	if write != nil {
+		m.writeMock = write
+	} else {
+		m.writeMock = func() error { return nil }
 	}
 	return &m
 }

@@ -18,7 +18,7 @@ type MQ interface {
 	Conn() *kafka.Conn
 	KafkaUri() string
 	Topic() string
-	WriteMessage(msg interface{}) error
+	WriteMessage(ctx context.Context, msg interface{}) error
 }
 
 func (m *msgq) createTopic() error {
@@ -54,16 +54,18 @@ func (m *msgq) Topic() string {
 	return m.topic
 }
 
-func (m *msgq) WriteMessage(msg interface{}) error {
+func (m *msgq) WriteMessage(ctx context.Context, msg interface{}) error {
 	b, err := json.Marshal(msg)
 	if err != nil {
 		return err
 	}
-	//msg := kafka.Message{Value: b}
-	//if err := tracing.InjectEventsSpan(*span, &m); err != nil {
-	//	return err
-	//}
-	if _, err := m.conn.Write(b); err != nil {
+	spanCtx, err := json.Marshal(ctx)
+	if err != nil {
+		return err
+	}
+	h := kafka.Header{Key: "span-context", Value: spanCtx}
+	kmsg := kafka.Message{Value: b, Headers: []kafka.Header{h}}
+	if _, err := m.conn.WriteMessages(kmsg); err != nil {
 		return err
 	}
 	if err := m.conn.Close(); err != nil {

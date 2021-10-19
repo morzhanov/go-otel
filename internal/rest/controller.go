@@ -10,28 +10,31 @@ import (
 	"reflect"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
+
+	"github.com/morzhanov/go-otel/internal/telemetry"
+
 	"github.com/gin-gonic/gin"
-	"github.com/morzhanov/go-otel/internal/metrics"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 )
 
 type baseController struct {
 	router *gin.Engine
-	//tracer opentracing.Tracer
-	logger *zap.Logger
-	mc     metrics.Collector
+	log    *zap.Logger
+	tel    telemetry.Telemetry
 }
 
 type BaseController interface {
 	Listen(ctx context.Context, cancel context.CancelFunc, port string)
 	ParseRestBody(ctx *gin.Context, input interface{}) error
 	HandleRestError(ctx *gin.Context, err error)
-	//GetSpan(ctx *gin.Context) *opentracing.Span
 	Handler(handler gin.HandlerFunc) gin.HandlerFunc
 	Router() *gin.Engine
-	//Tracer() opentracing.Tracer
 	Logger() *zap.Logger
-	MC() metrics.Collector
+	Tracer() telemetry.TraceFn
+	Meter() metric.Meter
+	//GetSpan(ctx *gin.Context) *opentracing.Span
 }
 
 func (c *baseController) Listen(
@@ -47,20 +50,20 @@ func (c *baseController) Listen(
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			cancel()
-			c.logger.Fatal("error during REST controller setup", zap.Error(err))
+			c.log.Fatal("error during REST controller setup", zap.Error(err))
 			return
 		}
 	}()
 
 	<-ctx.Done()
-	c.logger.Info("gRPC server started")
+	c.log.Info("gRPC server started")
 
 	ctx, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel2()
 	if err := srv.Shutdown(ctx); err != nil {
 		cancel()
 		cancel2()
-		c.logger.Fatal("error during REST controller setup", zap.Error(err))
+		c.log.Fatal("error during REST controller setup", zap.Error(err))
 	}
 }
 
@@ -75,7 +78,7 @@ func (c *baseController) ParseRestBody(ctx *gin.Context, input interface{}) erro
 }
 
 func (c *baseController) HandleRestError(ctx *gin.Context, err error) {
-	c.logger.Error(errors.Unwrap(err).Error())
+	c.log.Error(errors.Unwrap(err).Error())
 	if err.Error() == "not authorized" {
 		ctx.String(http.StatusUnauthorized, err.Error())
 		return
@@ -98,19 +101,41 @@ func (c *baseController) Handler(handler gin.HandlerFunc) gin.HandlerFunc {
 	}
 }
 
-func (c *baseController) Router() *gin.Engine { return c.router }
+func PerformRequest(ctx context.Context, req *http.Request) ([]byte, error) {
+	sci := ctx.Value("span-context")
+	sc := sci.(trace.SpanContext)
+	req.Header.Set("content-type", "application/json")
+	spanCtx, err := sc.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("span-context", string(spanCtx))
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+	return body, err
+}
 
-//func (c *baseController) Tracer() opentracing.Tracer { return c.tracer }
-func (c *baseController) Logger() *zap.Logger   { return c.logger }
-func (c *baseController) MC() metrics.Collector { return c.mc }
+func GetSpanContext(ctx *gin.Context) (*context.Context, error) {
+	scs := ctx.GetHeader("span-context")
+	var sctx context.Context
+	if err := json.Unmarshal([]byte(scs), &sctx); err != nil {
+		return nil, err
+	}
+	return &sctx, nil
+}
 
-func NewBaseController(
-	//tracer opentracing.Tracer,
-	logger *zap.Logger,
-	mc metrics.Collector,
-) BaseController {
+func (c *baseController) Router() *gin.Engine       { return c.router }
+func (c *baseController) Logger() *zap.Logger       { return c.log }
+func (c *baseController) Tracer() telemetry.TraceFn { return c.tel.Tracer() }
+func (c *baseController) Meter() metric.Meter       { return c.tel.Meter() }
+
+func NewBaseController(log *zap.Logger, tel telemetry.Telemetry) BaseController {
 	router := gin.Default()
-	c := baseController{router, logger, mc}
-	//c.mc.RegisterMetricsEndpoint(router)
-	return &c
+	return &baseController{router: router, log: log, tel: tel}
 }

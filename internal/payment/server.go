@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/morzhanov/go-otel/internal/telemetry"
+
 	gpayment "github.com/morzhanov/go-otel/api/grpc/payment"
 	gserver "github.com/morzhanov/go-otel/internal/grpc"
 	"github.com/morzhanov/go-otel/internal/mq"
@@ -20,23 +22,18 @@ type server struct {
 	srv *grpc.Server
 	url string
 	pay Payment
+	tel telemetry.Telemetry
 }
 
 type Server interface {
-	//PrepareContext(ctx context.Context) (context.Context, opentracing.Span)
 	Listen(ctx context.Context, cancel context.CancelFunc, server *grpc.Server)
 }
 
-//func (s *server) PrepareContext(ctx context.Context) (context.Context, opentracing.Span) {
-//	span := tracing.StartSpanFromGrpcRequest(s.Tracer, ctx)
-//	ctx = context.WithValue(ctx, "transport", sender.RpcTransport)
-//	return ctx, span
-//}
-
 func (s *server) GetPaymentInfo(ctx context.Context, in *gpayment.GetPaymentInfoRequest) (*gpayment.PaymentMessage, error) {
-	//ctx, span := s.PrepareContext(ctx)
-	//defer span.Finish()
-	return s.pay.GetPaymentInfo(in)
+	t := s.Tracer()("rest")
+	sctx, span := t.Start(ctx, "get-payment-info")
+	defer span.End()
+	return s.pay.GetPaymentInfo(sctx, in)
 }
 
 func (s *server) Listen(ctx context.Context, cancel context.CancelFunc, srv *grpc.Server) {
@@ -46,7 +43,6 @@ func (s *server) Listen(ctx context.Context, cancel context.CancelFunc, srv *grp
 		s.BaseServer.Logger().Fatal("error during grpc service start")
 		return
 	}
-
 	if err := srv.Serve(lis); err != nil {
 		cancel()
 		s.BaseServer.Logger().Fatal("error during grpc service start")
@@ -62,14 +58,14 @@ func (s *server) Listen(ctx context.Context, cancel context.CancelFunc, srv *grp
 }
 
 func NewServer(
-	//tracer opentracing.Tracer,
 	grpcAddr string,
 	grpcPort string,
 	logger *zap.Logger,
 	pay Payment,
+	tel telemetry.Telemetry,
 ) Server {
 	url := fmt.Sprintf("%s:%s", grpcAddr, grpcPort)
-	bs := gserver.NewServer(logger, url)
+	bs := gserver.NewServer(url, logger, tel)
 	s := &server{BaseServer: bs, srv: grpc.NewServer(), url: url, pay: pay}
 	gpayment.RegisterPaymentServer(s.srv, s)
 	reflection.Register(s.srv)

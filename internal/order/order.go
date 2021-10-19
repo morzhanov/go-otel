@@ -1,17 +1,17 @@
 package order
 
 import (
-	"context"
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
 
-	"github.com/morzhanov/go-otel/internal/mq"
+	"github.com/morzhanov/go-otel/api/grpc/payment"
 
 	"github.com/gin-gonic/gin"
 	porder "github.com/morzhanov/go-otel/api/grpc/order"
-	"github.com/morzhanov/go-otel/internal/metrics"
+	"github.com/morzhanov/go-otel/internal/mq"
 	"github.com/morzhanov/go-otel/internal/rest"
+	"github.com/morzhanov/go-otel/internal/telemetry"
 	uuid "github.com/satori/go.uuid"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -33,51 +33,81 @@ func (s *service) handleHttpErr(ctx *gin.Context, err error) {
 	s.BaseController.Logger().Info("error in the REST handler", zap.Error(err))
 }
 
-func (s *service) handleCreateOrder(c *gin.Context) {
-	jsonData, err := ioutil.ReadAll(c.Request.Body)
+func (s *service) handleCreateOrder(ctx *gin.Context) {
+	t := s.Tracer()("rest")
+	dbt := s.Tracer()("mongodb")
+	parentCtx, err := rest.GetSpanContext(ctx)
+	if err != nil {
+		s.handleHttpErr(ctx, err)
+		return
+	}
+	_, span := t.Start(*parentCtx, "create-order")
+	defer span.End()
+	dbctx, dbspan := dbt.Start(*parentCtx, "create-order")
+	defer dbspan.End()
+
+	jsonData, err := ioutil.ReadAll(ctx.Request.Body)
 	if err != nil {
 		return
 	}
 	d := porder.CreateOrderMessage{}
 	if err = json.Unmarshal(jsonData, &d); err != nil {
-		s.handleHttpErr(c, err)
+		s.handleHttpErr(ctx, err)
 		return
 	}
 
 	id := uuid.NewV4().String()
-	// TODO: try to add span to DB requests
 	msg := porder.OrderMessage{Id: id, Name: d.Name, Amount: d.Amount, Status: "new"}
-	_, err = s.coll.InsertOne(context.Background(), &msg)
+	_, err = s.coll.InsertOne(dbctx, &msg)
 	if err != nil {
-		s.handleHttpErr(c, err)
+		s.handleHttpErr(ctx, err)
 		return
 	}
-	c.JSON(http.StatusCreated, &msg)
+	ctx.JSON(http.StatusCreated, &msg)
 }
 
-func (s *service) handleProcessOrder(c *gin.Context) {
-	id := c.Param("id")
-	filter := bson.D{{"_id", id}}
-	update := bson.D{{"$set", bson.D{{"status", "processed"}}}}
-	// TODO: try to add span to DB requests
-	_, err := s.coll.UpdateOne(context.Background(), filter, update)
+func (s *service) handleProcessOrder(ctx *gin.Context) {
+	t := s.Tracer()("rest")
+	dbt := s.Tracer()("mongodb")
+	et := s.Tracer()("kafka")
+	parentCtx, err := rest.GetSpanContext(ctx)
 	if err != nil {
-		s.handleHttpErr(c, err)
+		s.handleHttpErr(ctx, err)
 		return
 	}
-	// TODO: try to add span to DB requests
-	res := s.coll.FindOne(context.Background(), filter)
+	_, span := t.Start(*parentCtx, "process-order")
+	defer span.End()
+	dbctx, dbspan := dbt.Start(*parentCtx, "process-order")
+	defer dbspan.End()
+	dbctxInsert, dbspanInsert := dbt.Start(*parentCtx, "get-order")
+	defer dbspanInsert.End()
+	ectx, espan := et.Start(*parentCtx, "process-order")
+	defer espan.End()
+
+	id := ctx.Param("id")
+	filter := bson.D{{"_id", id}}
+	update := bson.D{{"$set", bson.D{{"status", "processed"}}}}
+	_, err = s.coll.UpdateOne(dbctx, filter, update)
+	if err != nil {
+		s.handleHttpErr(ctx, err)
+		return
+	}
+	res := s.coll.FindOne(dbctxInsert, filter)
 	if res.Err() != nil {
-		s.handleHttpErr(c, res.Err())
+		s.handleHttpErr(ctx, res.Err())
 		return
 	}
 	msg := porder.OrderMessage{}
 	if err := res.Decode(&msg); err != nil {
-		s.handleHttpErr(c, res.Err())
+		s.handleHttpErr(ctx, res.Err())
 		return
 	}
 
-	c.JSON(http.StatusOK, &msg)
+	if err := s.mq.WriteMessage(ectx, &payment.ProcessPaymentMessage{OrderId: msg.Id, Name: msg.Name, Amount: msg.Amount, Status: msg.Status}); err != nil {
+		s.handleHttpErr(ctx, res.Err())
+		return
+	}
+	ctx.JSON(http.StatusOK, &msg)
 }
 
 func (s *service) Listen() error {
@@ -87,7 +117,7 @@ func (s *service) Listen() error {
 	return r.Run()
 }
 
-func NewService(log *zap.Logger, mc metrics.Collector, coll *mongo.Collection, msgq mq.MQ) Service {
-	bc := rest.NewBaseController(log, mc)
+func NewService(log *zap.Logger, tel telemetry.Telemetry, coll *mongo.Collection, msgq mq.MQ) Service {
+	bc := rest.NewBaseController(log, tel)
 	return &service{BaseController: bc, coll: coll, mq: msgq}
 }

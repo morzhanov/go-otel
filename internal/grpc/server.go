@@ -4,20 +4,24 @@ import (
 	"context"
 	"net"
 
+	"github.com/morzhanov/go-otel/internal/telemetry"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
 
 type baseServer struct {
-	//tracer opentracing.Tracer
-	logger *zap.Logger
-	url    string
+	url string
+	log *zap.Logger
+	tel telemetry.Telemetry
 }
 
 type BaseServer interface {
-	//PrepareContext(ctx context.Context) (context.Context, opentracing.Span)
 	Listen(ctx context.Context, cancel context.CancelFunc, server *grpc.Server)
 	Logger() *zap.Logger
+	Tracer() telemetry.TraceFn
+	Meter() metric.Meter
+	//PrepareContext(ctx context.Context) (context.Context, opentracing.Span)
 }
 
 //func (s *baseServer) PrepareContext(ctx context.Context) (context.Context, opentracing.Span) {
@@ -30,32 +34,28 @@ func (s *baseServer) Listen(ctx context.Context, cancel context.CancelFunc, serv
 	lis, err := net.Listen("tcp", s.url)
 	if err != nil {
 		cancel()
-		s.logger.Fatal("error during grpc server setup", zap.Error(err))
+		s.log.Fatal("error during grpc server setup", zap.Error(err))
 		return
 	}
 
 	if err := server.Serve(lis); err != nil {
 		cancel()
-		s.logger.Fatal("error during grpc server setup", zap.Error(err))
+		s.log.Fatal("error during grpc server setup", zap.Error(err))
 		return
 	}
-	s.logger.Info("Grpc server started", zap.String("port", s.url))
+	s.log.Info("Grpc server started", zap.String("port", s.url))
 	<-ctx.Done()
 	if err := lis.Close(); err != nil {
 		cancel()
-		s.logger.Fatal("error during grpc server setup", zap.Error(err))
+		s.log.Fatal("error during grpc server setup", zap.Error(err))
 		return
 	}
 }
 
-func (s *baseServer) Logger() *zap.Logger {
-	return s.logger
-}
+func (s *baseServer) Logger() *zap.Logger       { return s.log }
+func (s *baseServer) Tracer() telemetry.TraceFn { return s.tel.Tracer() }
+func (s *baseServer) Meter() metric.Meter       { return s.tel.Meter() }
 
-func NewServer(
-	//tracer opentracing.Tracer,
-	logger *zap.Logger,
-	url string,
-) BaseServer {
-	return &baseServer{logger, url}
+func NewServer(url string, log *zap.Logger, tel telemetry.Telemetry) BaseServer {
+	return &baseServer{log: log, url: url, tel: tel}
 }

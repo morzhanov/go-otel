@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/morzhanov/go-otel/internal/telemetry"
+
 	gpayment "github.com/morzhanov/go-otel/api/grpc/payment"
 	"github.com/morzhanov/go-otel/internal/config"
 	"github.com/morzhanov/go-otel/internal/event"
@@ -21,14 +23,19 @@ type Controller interface {
 }
 
 func (c *eventController) processPayment(in *kafka.Message) {
-	//span := c.CreateSpan(in)
-	//defer span.Finish()
+	et := c.Tracer()("kafka")
+	pctx, err := event.GetSpanContext(in)
+	if err != nil {
+		c.Logger().Error("error during process payment event processing", zap.Error(err))
+	}
+	sctx, span := et.Start(*pctx, "process-payment")
+	defer span.End()
 
 	res := gpayment.ProcessPaymentMessage{}
 	if err := json.Unmarshal(in.Value, &res); err != nil {
 		c.Logger().Error("error during process payment event processing", zap.Error(err))
 	}
-	if err := c.pay.ProcessPayment(&res); err != nil {
+	if err := c.pay.ProcessPayment(sctx, &res); err != nil {
 		c.Logger().Error("error during process payment event processing", zap.Error(err))
 	}
 }
@@ -38,11 +45,11 @@ func (c *eventController) Listen(ctx context.Context) {
 }
 
 func NewController(
-	//tracer opentracing.Tracer,
-	logger *zap.Logger,
 	pay Payment,
 	c *config.Config,
+	log *zap.Logger,
+	tel telemetry.Telemetry,
 ) (Controller, error) {
-	controller, err := event.NewController(logger, c.KafkaURL, c.KafkaTopic, c.KafkaGroupID)
+	controller, err := event.NewController(c.KafkaURL, c.KafkaTopic, c.KafkaGroupID, log, tel)
 	return &eventController{BaseController: controller, pay: pay}, err
 }

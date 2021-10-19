@@ -2,29 +2,30 @@ package event
 
 import (
 	"context"
+	"encoding/json"
+
+	"github.com/morzhanov/go-otel/internal/telemetry"
 
 	"github.com/morzhanov/go-otel/internal/mq"
 	"github.com/segmentio/kafka-go"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 )
 
 type baseController struct {
-	//tracer          opentracing.Tracer
 	mq      mq.MQ
-	logger  *zap.Logger
 	groupID string
+	log     *zap.Logger
+	tel     telemetry.Telemetry
 }
 
 type BaseController interface {
-	//CreateSpan(in *kafka.Message) opentracing.Span
 	Listen(ctx context.Context, processRequest func(*kafka.Message))
-	Logger() *zap.Logger
 	ConsumerGroupId() string
+	Logger() *zap.Logger
+	Tracer() telemetry.TraceFn
+	Meter() metric.Meter
 }
-
-//func (c *baseController) CreateSpan(in *kafka.Message) opentracing.Span {
-//	return tracing.StartSpanFromEventsRequest(c.tracer, in)
-//}
 
 func (c *baseController) Listen(
 	ctx context.Context,
@@ -34,7 +35,7 @@ func (c *baseController) Listen(
 	for {
 		m, err := r.ReadMessage(context.Background())
 		if err != nil {
-			c.logger.Error(err.Error())
+			c.log.Error(err.Error())
 			continue
 		}
 		go processRequest(&m)
@@ -47,30 +48,41 @@ func (c *baseController) Listen(
 	}
 }
 
-func (c *baseController) Logger() *zap.Logger {
-	return c.logger
-}
+func (c *baseController) Logger() *zap.Logger       { return c.log }
+func (c *baseController) ConsumerGroupId() string   { return c.groupID }
+func (c *baseController) Tracer() telemetry.TraceFn { return c.tel.Tracer() }
+func (c *baseController) Meter() metric.Meter       { return c.tel.Meter() }
 
-func (c *baseController) ConsumerGroupId() string {
-	return c.groupID
+func GetSpanContext(msg *kafka.Message) (*context.Context, error) {
+	var h kafka.Header
+	for _, v := range msg.Headers {
+		if v.Key == "span-context" {
+			h = v
+			break
+		}
+	}
+	var sctx context.Context
+	if err := json.Unmarshal(h.Value, &sctx); err != nil {
+		return nil, err
+	}
+	return &sctx, nil
 }
 
 func NewController(
-	//tracer opentracing.Tracer,
-	logger *zap.Logger,
 	kafkaUrl string,
 	kafkaTopic string,
 	kafkaGroupID string,
+	log *zap.Logger,
+	tel telemetry.Telemetry,
 ) (BaseController, error) {
 	msgQ, err := mq.NewMq(kafkaUrl, kafkaTopic)
 	if err != nil {
 		return nil, err
 	}
-	c := &baseController{
-		//tracer:          tracer,
+	return &baseController{
 		mq:      msgQ,
-		logger:  logger,
 		groupID: kafkaGroupID,
-	}
-	return c, err
+		log:     log,
+		tel:     tel,
+	}, nil
 }

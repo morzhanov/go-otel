@@ -5,8 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
+
+	"github.com/morzhanov/go-otel/internal/rest"
 
 	"github.com/morzhanov/go-otel/api/grpc/order"
 	"github.com/morzhanov/go-otel/api/grpc/payment"
@@ -18,25 +19,22 @@ type client struct {
 }
 
 type Client interface {
-	CreateOrder(msg *order.CreateOrderMessage) (*order.OrderMessage, error)
-	ProcessOrder(orderID string) (*order.OrderMessage, error)
-	GetPaymentInfo(orderID string) (*payment.PaymentMessage, error)
+	CreateOrder(ctx context.Context, msg *order.CreateOrderMessage) (*order.OrderMessage, error)
+	ProcessOrder(ctx context.Context, orderID string) (*order.OrderMessage, error)
+	GetPaymentInfo(ctx context.Context, orderID string) (*payment.PaymentMessage, error)
 }
 
-func (c *client) CreateOrder(msg *order.CreateOrderMessage) (*order.OrderMessage, error) {
+func (c *client) CreateOrder(ctx context.Context, msg *order.CreateOrderMessage) (*order.OrderMessage, error) {
 	b, err := json.Marshal(msg)
 	if err != nil {
 		return nil, err
 	}
-	res, err := http.Post(c.orderUrl, "application/json", bytes.NewReader(b))
+	req, err := http.NewRequest("POST", c.orderUrl, bytes.NewReader(b))
+	body, err := rest.PerformRequest(ctx, req)
 	if err != nil {
 		return nil, err
 	}
 
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return nil, err
-	}
 	o := order.OrderMessage{}
 	if err := json.Unmarshal(body, &o); err != nil {
 		return nil, err
@@ -44,14 +42,10 @@ func (c *client) CreateOrder(msg *order.CreateOrderMessage) (*order.OrderMessage
 	return &o, nil
 }
 
-func (c *client) ProcessOrder(orderID string) (*order.OrderMessage, error) {
+func (c *client) ProcessOrder(ctx context.Context, orderID string) (*order.OrderMessage, error) {
 	url := fmt.Sprintf("%s/%s", c.orderUrl, orderID)
-	res, err := http.NewRequest("PUT", url, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	body, err := ioutil.ReadAll(res.Body)
+	req, err := http.NewRequest("PUT", url, nil)
+	body, err := rest.PerformRequest(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -62,9 +56,9 @@ func (c *client) ProcessOrder(orderID string) (*order.OrderMessage, error) {
 	return &o, nil
 }
 
-func (c *client) GetPaymentInfo(orderID string) (*payment.PaymentMessage, error) {
+func (c *client) GetPaymentInfo(ctx context.Context, orderID string) (*payment.PaymentMessage, error) {
 	msg := payment.GetPaymentInfoRequest{OrderId: orderID}
-	return c.paymentClient.GetPaymentInfo(context.Background(), &msg)
+	return c.paymentClient.GetPaymentInfo(ctx, &msg)
 }
 
 func NewClient(orderUrl string, paymentClient payment.PaymentClient) Client {
