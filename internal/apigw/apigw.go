@@ -27,6 +27,7 @@ func (c *controller) handleHttpErr(ctx *gin.Context, err error) {
 }
 
 func (c *controller) handleCreateOrder(ctx *gin.Context) {
+	c.Meter().IncReqCount()
 	t := c.Tracer()("rest")
 	sctx, span := t.Start(ctx, "create-order")
 	defer span.End()
@@ -45,6 +46,7 @@ func (c *controller) handleCreateOrder(ctx *gin.Context) {
 }
 
 func (c *controller) handleProcessOrder(ctx *gin.Context) {
+	c.Meter().IncReqCount()
 	t := c.Tracer()("rest")
 	sctx, span := t.Start(ctx, "process-order")
 	ctx.Set("span-context", span.SpanContext())
@@ -60,6 +62,7 @@ func (c *controller) handleProcessOrder(ctx *gin.Context) {
 }
 
 func (c *controller) handleGetPaymentInfo(ctx *gin.Context) {
+	c.Meter().IncReqCount()
 	t := c.Tracer()("rest")
 	sctx, span := t.Start(ctx, "get-payment-info")
 	ctx.Set("span-context", span.SpanContext())

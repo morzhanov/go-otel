@@ -4,11 +4,12 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/morzhanov/go-otel/internal/telemetry/meter"
+
 	"github.com/morzhanov/go-otel/internal/telemetry"
 
 	"github.com/morzhanov/go-otel/internal/mq"
 	"github.com/segmentio/kafka-go"
-	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 )
 
@@ -24,7 +25,7 @@ type BaseController interface {
 	ConsumerGroupId() string
 	Logger() *zap.Logger
 	Tracer() telemetry.TraceFn
-	Meter() metric.Meter
+	Meter() meter.Meter
 }
 
 func (c *baseController) Listen(
@@ -51,7 +52,7 @@ func (c *baseController) Listen(
 func (c *baseController) Logger() *zap.Logger       { return c.log }
 func (c *baseController) ConsumerGroupId() string   { return c.groupID }
 func (c *baseController) Tracer() telemetry.TraceFn { return c.tel.Tracer() }
-func (c *baseController) Meter() metric.Meter       { return c.tel.Meter() }
+func (c *baseController) Meter() meter.Meter        { return c.tel.Meter() }
 
 func GetSpanContext(msg *kafka.Message) (*context.Context, error) {
 	var h kafka.Header
@@ -76,13 +77,5 @@ func NewController(
 	tel telemetry.Telemetry,
 ) (BaseController, error) {
 	msgQ, err := mq.NewMq(kafkaUrl, kafkaTopic)
-	if err != nil {
-		return nil, err
-	}
-	return &baseController{
-		mq:      msgQ,
-		groupID: kafkaGroupID,
-		log:     log,
-		tel:     tel,
-	}, nil
+	return &baseController{mq: msgQ, groupID: kafkaGroupID, log: log, tel: tel}, err
 }

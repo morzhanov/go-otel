@@ -4,8 +4,9 @@ import (
 	"context"
 	"net"
 
+	"github.com/morzhanov/go-otel/internal/telemetry/meter"
+
 	"github.com/morzhanov/go-otel/internal/telemetry"
-	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
@@ -20,15 +21,8 @@ type BaseServer interface {
 	Listen(ctx context.Context, cancel context.CancelFunc, server *grpc.Server)
 	Logger() *zap.Logger
 	Tracer() telemetry.TraceFn
-	Meter() metric.Meter
-	//PrepareContext(ctx context.Context) (context.Context, opentracing.Span)
+	Meter() meter.Meter
 }
-
-//func (s *baseServer) PrepareContext(ctx context.Context) (context.Context, opentracing.Span) {
-//	span := tracing.StartSpanFromGrpcRequest(s.Tracer, ctx)
-//	ctx = context.WithValue(ctx, "transport", sender.RpcTransport)
-//	return ctx, span
-//}
 
 func (s *baseServer) Listen(ctx context.Context, cancel context.CancelFunc, server *grpc.Server) {
 	lis, err := net.Listen("tcp", s.url)
@@ -54,7 +48,7 @@ func (s *baseServer) Listen(ctx context.Context, cancel context.CancelFunc, serv
 
 func (s *baseServer) Logger() *zap.Logger       { return s.log }
 func (s *baseServer) Tracer() telemetry.TraceFn { return s.tel.Tracer() }
-func (s *baseServer) Meter() metric.Meter       { return s.tel.Meter() }
+func (s *baseServer) Meter() meter.Meter        { return s.tel.Meter() }
 
 func NewServer(url string, log *zap.Logger, tel telemetry.Telemetry) BaseServer {
 	return &baseServer{log: log, url: url, tel: tel}

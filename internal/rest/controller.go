@@ -10,12 +10,13 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/morzhanov/go-otel/internal/telemetry/meter"
+
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/morzhanov/go-otel/internal/telemetry"
 
 	"github.com/gin-gonic/gin"
-	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 )
 
@@ -33,8 +34,7 @@ type BaseController interface {
 	Router() *gin.Engine
 	Logger() *zap.Logger
 	Tracer() telemetry.TraceFn
-	Meter() metric.Meter
-	//GetSpan(ctx *gin.Context) *opentracing.Span
+	Meter() meter.Meter
 }
 
 func (c *baseController) Listen(
@@ -133,7 +133,7 @@ func GetSpanContext(ctx *gin.Context) (*context.Context, error) {
 func (c *baseController) Router() *gin.Engine       { return c.router }
 func (c *baseController) Logger() *zap.Logger       { return c.log }
 func (c *baseController) Tracer() telemetry.TraceFn { return c.tel.Tracer() }
-func (c *baseController) Meter() metric.Meter       { return c.tel.Meter() }
+func (c *baseController) Meter() meter.Meter        { return c.tel.Meter() }
 
 func NewBaseController(log *zap.Logger, tel telemetry.Telemetry) BaseController {
 	router := gin.Default()

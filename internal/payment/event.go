@@ -23,6 +23,7 @@ type Controller interface {
 }
 
 func (c *eventController) processPayment(in *kafka.Message) {
+	c.Meter().IncReqCount()
 	et := c.Tracer()("kafka")
 	pctx, err := event.GetSpanContext(in)
 	if err != nil {

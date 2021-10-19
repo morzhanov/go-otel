@@ -30,6 +30,7 @@ type Server interface {
 }
 
 func (s *server) GetPaymentInfo(ctx context.Context, in *gpayment.GetPaymentInfoRequest) (*gpayment.PaymentMessage, error) {
+	s.Meter().IncReqCount()
 	t := s.Tracer()("rest")
 	sctx, span := t.Start(ctx, "get-payment-info")
 	defer span.End()

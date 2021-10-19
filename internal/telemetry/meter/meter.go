@@ -1,6 +1,7 @@
 package meter
 
 import (
+	"context"
 	"net/http"
 
 	"go.opentelemetry.io/otel/exporters/prometheus"
@@ -14,11 +15,11 @@ import (
 )
 
 type mtr struct {
-	provider metric.MeterProvider
+	reqCount metric.Int64Counter
 }
 
 type Meter interface {
-	Provider() metric.MeterProvider
+	IncReqCount()
 }
 
 func InitMeter(log *zap.Logger) metric.MeterProvider {
@@ -44,11 +45,13 @@ func InitMeter(log *zap.Logger) metric.MeterProvider {
 	return exporter.MeterProvider()
 }
 
-func (m *mtr) Provider() metric.MeterProvider {
-	return m.provider
+func (m *mtr) IncReqCount() {
+	m.reqCount.Add(context.TODO(), 1)
 }
 
-func NewMeter(log *zap.Logger) Meter {
+func NewMeter(log *zap.Logger) (Meter, error) {
 	provider := InitMeter(log)
-	return &mtr{provider: provider}
+	prom := provider.Meter("prometheus")
+	rc, err := prom.NewInt64Counter("request_count")
+	return &mtr{reqCount: rc}, err
 }

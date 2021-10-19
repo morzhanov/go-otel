@@ -34,6 +34,7 @@ func (s *service) handleHttpErr(ctx *gin.Context, err error) {
 }
 
 func (s *service) handleCreateOrder(ctx *gin.Context) {
+	s.Meter().IncReqCount()
 	t := s.Tracer()("rest")
 	dbt := s.Tracer()("mongodb")
 	parentCtx, err := rest.GetSpanContext(ctx)
@@ -67,6 +68,7 @@ func (s *service) handleCreateOrder(ctx *gin.Context) {
 }
 
 func (s *service) handleProcessOrder(ctx *gin.Context) {
+	s.Meter().IncReqCount()
 	t := s.Tracer()("rest")
 	dbt := s.Tracer()("mongodb")
 	et := s.Tracer()("kafka")
