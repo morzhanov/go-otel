@@ -1,13 +1,12 @@
 package apigw
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/morzhanov/go-otel/internal/telemetry"
 
 	"github.com/gin-gonic/gin"
-	"github.com/morzhanov/go-otel/api/grpc/order"
+	"github.com/morzhanov/go-otel/api/order"
 	"github.com/morzhanov/go-otel/internal/rest"
 	"go.uber.org/zap"
 )
@@ -18,7 +17,7 @@ type controller struct {
 }
 
 type Controller interface {
-	Listen(ctx context.Context, cancel context.CancelFunc, port string)
+	Listen(port string)
 }
 
 func (c *controller) handleHttpErr(ctx *gin.Context, err error) {
@@ -77,12 +76,8 @@ func (c *controller) handleGetPaymentInfo(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, res)
 }
 
-func (c *controller) Listen(
-	ctx context.Context,
-	cancel context.CancelFunc,
-	port string,
-) {
-	c.BaseController.Listen(ctx, cancel, port)
+func (c *controller) Listen(port string) {
+	c.BaseController.Listen(port)
 }
 
 func NewController(

@@ -27,7 +27,7 @@ type baseController struct {
 }
 
 type BaseController interface {
-	Listen(ctx context.Context, cancel context.CancelFunc, port string)
+	Listen(port string)
 	ParseRestBody(ctx *gin.Context, input interface{}) error
 	HandleRestError(ctx *gin.Context, err error)
 	Handler(handler gin.HandlerFunc) gin.HandlerFunc
@@ -38,30 +38,22 @@ type BaseController interface {
 }
 
 func (c *baseController) Listen(
-	ctx context.Context,
-	cancel context.CancelFunc,
 	port string,
 ) {
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%s", port),
 		Handler: c.router,
 	}
-
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			cancel()
 			c.log.Fatal("error during REST controller setup", zap.Error(err))
 			return
 		}
 	}()
-
-	<-ctx.Done()
 	c.log.Info("gRPC server started")
-
 	ctx, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel2()
 	if err := srv.Shutdown(ctx); err != nil {
-		cancel()
 		cancel2()
 		c.log.Fatal("error during REST controller setup", zap.Error(err))
 	}
@@ -86,19 +78,8 @@ func (c *baseController) HandleRestError(ctx *gin.Context, err error) {
 	ctx.String(http.StatusInternalServerError, err.Error())
 }
 
-//func (c *baseController) GetSpan(ctx *gin.Context) *opentracing.Span {
-//	item, _ := ctx.Get("span")
-//	span := item.(opentracing.Span)
-//	return &span
-//}
-
 func (c *baseController) Handler(handler gin.HandlerFunc) gin.HandlerFunc {
-	return func(ctx *gin.Context) {
-		//span := tracing.StartSpanFromHttpRequest(c.tracer, ctx.Request)
-		//ctx.Set("span", span)
-		handler(ctx)
-		//defer span.Finish()
-	}
+	return handler
 }
 
 func PerformRequest(ctx context.Context, req *http.Request) ([]byte, error) {

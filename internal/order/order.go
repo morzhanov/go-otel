@@ -5,10 +5,9 @@ import (
 	"io/ioutil"
 	"net/http"
 
-	"github.com/morzhanov/go-otel/api/grpc/payment"
-
 	"github.com/gin-gonic/gin"
-	porder "github.com/morzhanov/go-otel/api/grpc/order"
+	porder "github.com/morzhanov/go-otel/api/order"
+	"github.com/morzhanov/go-otel/api/payment"
 	"github.com/morzhanov/go-otel/internal/mq"
 	"github.com/morzhanov/go-otel/internal/rest"
 	"github.com/morzhanov/go-otel/internal/telemetry"
@@ -25,7 +24,7 @@ type service struct {
 }
 
 type Service interface {
-	Listen() error
+	Listen()
 }
 
 func (s *service) handleHttpErr(ctx *gin.Context, err error) {
@@ -112,11 +111,11 @@ func (s *service) handleProcessOrder(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, &msg)
 }
 
-func (s *service) Listen() error {
+func (s *service) Listen() {
 	r := s.BaseController.Router()
 	r.POST("/", s.handleCreateOrder)
 	r.POST("/:id", s.handleProcessOrder)
-	return r.Run()
+	r.Run()
 }
 
 func NewService(log *zap.Logger, tel telemetry.Telemetry, coll *mongo.Collection, msgq mq.MQ) Service {

@@ -1,18 +1,19 @@
 package main
 
 import (
-	"fmt"
+	"context"
 	"log"
 	"os"
 	"os/signal"
 
-	"github.com/morzhanov/go-otel/api/payment"
-	"github.com/morzhanov/go-otel/internal/apigw"
+	"github.com/morzhanov/go-otel/internal/payment"
+
+	"github.com/morzhanov/go-otel/internal/psql"
+
 	"github.com/morzhanov/go-otel/internal/config"
 	"github.com/morzhanov/go-otel/internal/logger"
 	"github.com/morzhanov/go-otel/internal/telemetry"
 	"go.uber.org/zap"
-	"google.golang.org/grpc"
 )
 
 func failOnError(l *zap.Logger, step string, err error) {
@@ -28,15 +29,15 @@ func main() {
 	}
 	c, err := config.NewConfig()
 	failOnError(l, "config", err)
-	t, err := telemetry.NewTelemetry(c.JaegerURL, "apigw", l)
+	t, err := telemetry.NewTelemetry(c.JaegerURL, "payment", l)
 	failOnError(l, "telemetry", err)
+	p, err := psql.NewDb(c.PostgresURL)
+	failOnError(l, "postgres", err)
 
-	uri := fmt.Sprintf("%s:%s", c.PaymentGRPCurl, c.PaymentGRPCport)
-	conn, err := grpc.Dial(uri, grpc.WithInsecure(), grpc.WithBlock())
-	failOnError(l, "config", err)
-	client := apigw.NewClient(c.OrderRESTurl, payment.NewPaymentClient(conn))
-	srv := apigw.NewController(client, l, t)
-	go srv.Listen(c.APIGWport)
+	pay := payment.NewPayment(p, t)
+	srv, err := payment.NewController(pay, c, l, t)
+	failOnError(l, "service", err)
+	go srv.Listen(context.Background())
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt)
